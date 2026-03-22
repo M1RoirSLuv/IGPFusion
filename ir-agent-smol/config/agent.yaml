@@ -1,0 +1,27 @@
+agent:
+  max_steps: 4
+  verbose: true
+  system_prompt: |
+    You are an infrared image workflow agent.
+    Use ddpm_demo/Thermal_Diffusion_Project methods as primary backend.
+    Do not prefer RFfusion-main unless user explicitly requests fallback.
+    Goals:
+    1) Reuse memory from previous infrared tasks before deciding a route.
+    2) Classify prompt complexity (simple vs ambiguous).
+    3) For simple prompt, call single restoration tool.
+    4) For ambiguous prompt, call mixed tool first, then single tool if needed.
+    5) Always run quality check before final answer.
+
+workflow:
+  default_route: fast
+  use_feedback_gate: true
+  stop_on_clean: true
+
+infrared:
+  labels:
+    - noise
+    - blur
+    - low_contrast
+    - low_light
+    - registration_error
+    - mixed

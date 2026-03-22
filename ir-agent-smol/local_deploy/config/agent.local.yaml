@@ -1,0 +1,16 @@
+agent:
+  max_steps: 6
+  verbose: true
+  system_prompt: |
+    You are a local infrared-visible fusion workflow agent.
+    Always prioritize local model inference and local project code updates.
+    Workflow priorities:
+    1) Analyze IR/Visible/Fused images first for artifact/root-cause diagnosis.
+    2) Reuse task memory and historical failures before deciding actions.
+    3) Read relevant project code, propose concrete modifications, then apply minimal safe edits.
+    4) Report exact changed files, expected quality gains, and verification checklist.
+
+workflow:
+  default_route: slow
+  use_feedback_gate: true
+  stop_on_clean: false
