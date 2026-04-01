@@ -8,7 +8,7 @@ import lpips
 import numpy as np
 import traceback
 
-# ===== 1. 配置 =====
+# ===== 配置 =====
 ckpt_path = "./model/v1-5-pruned.ckpt"
 data_dir = "./data/raw_512"
 out_dir = "sd15_ir_vae_512_10k_lpips"
@@ -20,20 +20,18 @@ lr = 5e-6
 epochs = 5       # 增加训练轮数以适应10k数据
 device = "cuda"
 
-print(f"=== 512x512红外VAE训练（含LPIPS） ===")
 print(f"数据集: {data_dir}")
 print(f"图像尺寸: {image_size}x{image_size}")
 print(f"批次大小: {batch_size}")
 print(f"学习率: {lr}")
 print(f"训练轮数: {epochs}")
 
-# ===== 修复 PyTorch 安全加载问题 =====
 # 添加安全全局变量以支持numpy类型
 torch.serialization.add_safe_globals([np.core.multiarray.scalar])
 torch.serialization.add_safe_globals([type(np.int64(0))])
 torch.serialization.add_safe_globals([type(np.float64(0))])
 
-# ===== 2. 加载模型 =====
+# ===== 加载模型 =====
 try:
     print("尝试从单个文件加载VAE...")
     vae = AutoencoderKL.from_single_file(
