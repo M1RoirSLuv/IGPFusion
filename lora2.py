@@ -24,10 +24,10 @@ epochs = 10
 warmup_epochs = 3
 device = "cuda"
 
-print(f"=== 修复版：512x512红外LoRA微调 ===")
+print(f"=== 512x512红外LoRA微调 ===")
 print(f"数据集: {data_dir}, 分辨率: {image_size}x{image_size}")
 
-# ===== 1. 加载基础模型 =====
+# ===== 加载基础模型 =====
 print("正在加载基础模型...")
 try:
     checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=False)
@@ -74,23 +74,23 @@ try:
         scheduler=DDPMScheduler.from_config({"num_train_timesteps": 1000}),
         safety_checker=None, feature_extractor=None,
     )
-    print("✅ 基础模型构建完成")
+    print("基础模型构建完成")
 
 except Exception as e:
-    print(f"❌ 基础模型加载失败: {e}")
+    print(f"基础模型加载失败: {e}")
     exit(1)
 
-# ===== 2. 加载训练好的VAE =====
+# ===== 加载训练好的VAE =====
 trained_vae_path = "./sd15_ir_vae_512_10k_lpips/vae_best_lpips"
 if os.path.exists(trained_vae_path):
     try:
         trained_vae = AutoencoderKL.from_pretrained(trained_vae_path, torch_dtype=torch.float16)
         pipe.vae = trained_vae
-        print(f"✅ 已加载训练VAE: {trained_vae_path}")
+        print(f"已加载训练VAE: {trained_vae_path}")
     except Exception as e:
-        print(f"⚠️ 加载训练VAE失败: {e}, 使用基础VAE")
+        print(f"加载训练VAE失败: {e}, 使用基础VAE")
 else:
-    print(f"⚠️ 未找到训练VAE: {trained_vae_path}")
+    print(f"未找到训练VAE: {trained_vae_path}")
 
 # 移动到设备并冻结
 pipe = pipe.to(device, dtype=torch.float16)
@@ -131,7 +131,7 @@ class InfraredDataset(Dataset):
 dataset = InfraredDataset(data_dir, image_size)
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=2, drop_last=True)
 
-# ===== 4. LoRA层定义 (确保设备正确) =====
+# ===== LoRA层定义  =====
 class SafeLoRA(nn.Module):
     def __init__(self, layer, rank=8):
         super().__init__()
@@ -150,7 +150,7 @@ class SafeLoRA(nn.Module):
         nn.init.xavier_uniform_(self.down.weight)
         nn.init.zeros_(self.up.weight)
         
-        # 关键：立即移动到与原层相同的设备
+        # 立即移动到与原层相同的设备
         self.to(layer.weight.device)
         
     def forward(self, x):
@@ -161,7 +161,7 @@ class SafeLoRA(nn.Module):
         lora_out = self.up(self.down(x))
         return (residual + lora_out).to(input_dtype)
 
-# ===== 5. 注入LoRA =====
+# ===== 注入LoRA =====
 print("正在注入LoRA层...")
 lora_params = []
 injected_count = 0
@@ -186,7 +186,7 @@ for name, module in pipe.unet.named_modules():
         lora_params.extend(list(lora_wrapper.up.parameters()))
         injected_count += 1
 
-print(f"✅ 成功注入 {injected_count} 个LoRA模块，共 {len(lora_params)} 个参数")
+print(f"成功注入 {injected_count} 个LoRA模块，共 {len(lora_params)} 个参数")
 
 # 再次确认所有LoRA参数都在GPU上
 for p in lora_params:
@@ -197,7 +197,7 @@ for p in lora_params:
 for p in lora_params:
     p.requires_grad = True
 
-# ===== 6. 优化器与调度器 =====
+# ===== 优化器与调度器 =====
 optimizer = torch.optim.AdamW(lora_params, lr=lr, weight_decay=0.01)
 
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR
@@ -213,7 +213,7 @@ with torch.no_grad():
         pipe.tokenizer([""], return_tensors="pt", padding=True).input_ids.to(device)
     )[0].to(dtype=torch.float16)
 
-# ===== 7. 训练循环 (修复AMP逻辑) =====
+# ===== 训练循环 (修复AMP逻辑) =====
 print("开始训练...")
 pipe.unet.train()
 best_loss = float('inf')
@@ -249,7 +249,7 @@ for epoch in range(epochs):
             optimizer.zero_grad()
             scaler.scale(loss).backward()
             
-            # --- 核心修复：正确的梯度裁剪和更新流程 ---
+            # 梯度裁剪和更新流程
             # 1. Unscale gradients (只调用一次)
             scaler.unscale_(optimizer)
             
@@ -270,7 +270,7 @@ for epoch in range(epochs):
             progress_bar.set_postfix({"loss": f"{loss.item():.4f}", "lr": f"{current_lr:.2e}"})
             
         except Exception as e:
-            print(f"\n❌ 批次错误: {e}")
+            print(f"\n批次错误: {e}")
             # 如果发生严重错误，重置scaler以防状态损坏
             scaler.update() 
             continue
@@ -282,7 +282,7 @@ for epoch in range(epochs):
         best_loss = avg_loss
         save_path = os.path.join(out_dir, "best_lora.pt")
         save_lora(save_path)
-        print(f"🏆 保存最佳模型: {save_path}")
+        print(f"保存最佳模型: {save_path}")
     
     if (epoch + 1) % 5 == 0:
         save_path = os.path.join(out_dir, f"lora_epoch_{epoch+1}.pt")
