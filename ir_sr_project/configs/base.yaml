@@ -1,0 +1,45 @@
+seed: 42
+output_dir: outputs/ir_sr_mvp
+
+data:
+  root: data/dataset
+  train_split: train
+  val_split: val
+  hr_subdir: HR
+  exts: ["png", "jpg", "jpeg", "bmp"]
+  scale: 4
+  hr_size: 256
+  num_workers: 4
+
+model:
+  in_ch: 1
+  feat_ch: 64
+  num_blocks: 8
+  upscale: 4
+
+train:
+  epochs: 80
+  batch_size: 8
+  lr: 2.0e-4
+  weight_decay: 0.0
+  grad_clip: 1.0
+  val_every: 1
+  save_every: 5
+
+  # distillation from SD1.5+LoRA teacher
+  use_teacher_distill: false
+  teacher_path: generative
+  teacher_layer_keys: ["down0", "mid", "up0"]
+
+  # lightweight semantic branch placeholder (disabled by default)
+  use_prompt_loss: false
+
+loss:
+  w_l1: 1.0
+  w_lpips: 0.1
+  w_distill: 0.05
+  w_freq: 0.05
+
+runtime:
+  device: cuda
+  amp: true
