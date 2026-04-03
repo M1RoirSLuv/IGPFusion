@@ -1,4 +1,4 @@
-# IR-SR Distill (MVP)
+# IR-SR Distill
 
 A standalone infrared super-resolution/enhancement project split from the fusion repo.
 
