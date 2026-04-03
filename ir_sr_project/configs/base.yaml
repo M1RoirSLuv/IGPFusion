@@ -39,7 +39,15 @@ loss:
   w_lpips: 0.1
   w_distill: 0.05
   w_freq: 0.05
+  w_prompt: 0.02
 
 runtime:
   device: cuda
   amp: true
+
+
+prompt:
+  model_name_or_path: model/clip-vit-large-patch14
+  positive_prompt: "a high quality infrared image with clear thermal edges"
+  negative_prompt: "a blurry noisy low quality infrared image"
+  margin: 0.1

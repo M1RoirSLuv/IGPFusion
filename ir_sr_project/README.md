@@ -65,3 +65,25 @@ You can further improve quality with either of the following training-only strat
    - Use low guidance weight and late-epoch scheduling to avoid over-constraining texture.
 
 Inference remains unchanged (student-only), so deployment cost is still low.
+
+
+## Enable CLIP Prompt Branch in Training
+
+Set in config:
+
+```yaml
+train:
+  use_prompt_loss: true
+loss:
+  w_prompt: 0.02
+prompt:
+  model_name_or_path: model/clip-vit-large-patch14
+  positive_prompt: "a high quality infrared image with clear thermal edges"
+  negative_prompt: "a blurry noisy low quality infrared image"
+  margin: 0.1
+```
+
+The training loop will compute CLIP image/text cosine scores and add a ranking loss:
+`L_prompt = relu(margin - s_pos + s_neg)`
+
+This branch is training-only; inference remains student-only.
