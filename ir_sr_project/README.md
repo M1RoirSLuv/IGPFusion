@@ -20,6 +20,7 @@ ir_sr_project/
   train.py
   infer.py
   scripts/train.sh
+  tools/generate_synthetic_hr.py
 ```
 
 ## Data Layout
@@ -33,6 +34,48 @@ data_root/
 ```
 
 LR is generated online by bicubic downsampling.
+
+
+## CoRPLE / DifIISR Reuse Status
+
+- Current code is **not** a line-by-line direct reuse of CoRPLE or DifIISR repos.
+- The student network is a **CoRPLE-inspired lightweight design**.
+- The frequency-domain loss is a **DifIISR-inspired idea** (lightweight adaptation), not their full diffusion reverse-process guidance.
+
+## Do You Need Generative Model Outputs as HR?
+
+Short answer: **No, not required**.
+
+- For super-resolution training, the standard and preferred setup is: use real infrared HR images as ground truth, then bicubic downsample online to make LR inputs.
+- Your generative model is optional, mainly for:
+  1) data augmentation (synthetic HR),
+  2) teacher feature distillation (training-time prior).
+
+Recommended priority:
+1. Real HR dataset first (main training data).
+2. Synthetic HR as auxiliary only (mixed in with lower sampling ratio).
+
+## Optional: Generate Synthetic HR with Your SD1.5+LoRA
+
+You can create extra synthetic HR images with:
+
+```bash
+python ir_sr_project/tools/generate_synthetic_hr.py \
+  --base_model path_or_hf_id_to_sd15 \
+  --lora_path path/to/your_lora \
+  --prompt_file data/prompts_ir.txt \
+  --output_dir data/synthetic_hr \
+  --num_images_per_prompt 4
+```
+
+`prompt_file` format (one prompt per line):
+
+```text
+a high-quality infrared surveillance scene, clear thermal edges
+a thermal pedestrian scene at night, sharp structure, low noise
+```
+
+Then place generated images under your HR folder (or a parallel synthetic split) and keep real data dominant.
 
 ## Quick Start
 
