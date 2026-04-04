@@ -15,7 +15,6 @@ from ir_sr_project.datasets.ir_sr_dataset import DatasetConfig, IRSRDataset
 from ir_sr_project.models.corple_student import CoRPLELite
 from ir_sr_project.models.losses import DistillLoss, LPIPSLoss, freq_loss, l1_loss
 from ir_sr_project.models.teacher_adapter import TeacherAdapter
-from ir_sr_project.models.prompt_guidance import CLIPPromptLoss, PromptConfig
 
 
 def set_seed(seed: int) -> None:
@@ -81,19 +80,6 @@ def main():
             proj_ch=cfg["model"]["feat_ch"],
         ).to(device)
 
-    use_prompt_loss = bool(cfg["train"].get("use_prompt_loss", False))
-    prompt_loss_fn = None
-    if use_prompt_loss:
-        pcfg = cfg.get("prompt", {})
-        prompt_loss_fn = CLIPPromptLoss(
-            PromptConfig(
-                model_name_or_path=pcfg.get("model_name_or_path", "model/clip-vit-large-patch14"),
-                positive_prompt=pcfg.get("positive_prompt", "a high quality infrared image with clear thermal edges"),
-                negative_prompt=pcfg.get("negative_prompt", "a blurry noisy low quality infrared image"),
-                margin=float(pcfg.get("margin", 0.1)),
-            )
-        ).to(device)
-
     best_psnr = -1.0
     epochs = int(cfg["train"]["epochs"])
 
@@ -125,13 +111,6 @@ def main():
                     tea_feats = teacher.extract(lr)
                     loss_dis = distill_loss_fn(stu_feats, tea_feats)
                     loss = loss + cfg["loss"]["w_distill"] * loss_dis
-
-                loss_prompt = torch.tensor(0.0, device=device)
-                prompt_stats = {"s_pos": 0.0, "s_neg": 0.0}
-                if use_prompt_loss and prompt_loss_fn is not None:
-                    with autocast(enabled=False):
-                        loss_prompt, prompt_stats = prompt_loss_fn(sr.float())
-                    loss = loss + float(cfg["loss"].get("w_prompt", 0.02)) * loss_prompt
 
             scaler.scale(loss).backward()
             if float(cfg["train"]["grad_clip"]) > 0:
