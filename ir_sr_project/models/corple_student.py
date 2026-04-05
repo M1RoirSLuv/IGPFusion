@@ -62,7 +62,7 @@ class CoRPLELite(nn.Module):
 
     def __init__(self, in_ch: int = 1, feat_ch: int = 64, num_blocks: int = 8, upscale: int = 4):
         super().__init__()
-        assert upscale in (2, 4), "Only x2/x4 is supported in this MVP."
+        assert upscale in (2, 4), "Only x2/x4 is supported in this version."
         self.upscale = upscale
 
         self.head = nn.Conv2d(in_ch, feat_ch, 3, padding=1)
