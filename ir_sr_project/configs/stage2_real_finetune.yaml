@@ -1,13 +1,13 @@
 seed: 42
-output_dir: ./ir_sr_project/outputs/ir_sr
+output_dir: ./ir_sr_project/outputs/ir_sr_stage2_flir
 
 data:
-  root: ./ir_sr_project/datasets
-  train_split: train
-  val_split: val
+  root: ./ir_sr_project/datasets/FLIR-IISR
+  train_split: .
+  val_split: .
   hr_subdir: HR
   lr_subdir: LR
-  use_precomputed_lr: false  # true: load LR from disk, false: bicubic-downsample HR online
+  use_precomputed_lr: true
   exts: ["png", "jpg", "jpeg", "bmp"]
   scale: 4
   hr_size: 256
@@ -20,20 +20,21 @@ model:
   upscale: 4
 
 train:
-  epochs: 80
+  epochs: 100
   batch_size: 8
-  lr: 2.0e-4
+  lr: 1.0e-4
   weight_decay: 0.0
   grad_clip: 1.0
   val_every: 1
   save_every: 5
 
-  # distillation from SD1.5+LoRA teacher
-  use_teacher_distill: false
-  teacher_path: generative  # merged SD1.5-IR folder with model_index.json/unet/vae/...
+  init_ckpt: ./ir_sr_project/outputs/ir_sr_stage1_generated/best.pth
+  resume_ckpt: ""
+
+  use_teacher_distill: true
+  teacher_path: ./generative
   teacher_layer_keys: ["down0", "mid", "up0"]
 
-  # lightweight semantic branch placeholder (disabled by default)
   use_prompt_loss: false
 
 loss:
@@ -46,7 +47,6 @@ loss:
 runtime:
   device: cuda
   amp: true
-
 
 prompt:
   model_name_or_path: model/clip-vit-large-patch14
