@@ -67,6 +67,32 @@ def main():
     )
     scaler = GradScaler(enabled=bool(cfg["runtime"].get("amp", True)))
 
+    start_epoch = 1
+    best_psnr = -1.0
+
+    init_ckpt = str(cfg["train"].get("init_ckpt", "")).strip()
+    resume_ckpt = str(cfg["train"].get("resume_ckpt", "")).strip()
+
+    if resume_ckpt:
+        ckpt = torch.load(resume_ckpt, map_location=device)
+        if "model" not in ckpt:
+            raise KeyError(f"Checkpoint missing 'model' key: {resume_ckpt}")
+        model.load_state_dict(ckpt["model"], strict=True)
+        if "optimizer" in ckpt:
+            optimizer.load_state_dict(ckpt["optimizer"])
+        if "scaler" in ckpt:
+            scaler.load_state_dict(ckpt["scaler"])
+        start_epoch = int(ckpt.get("epoch", 0)) + 1
+        best_psnr = float(ckpt.get("psnr", -1.0))
+        print(f"[Resume] loaded {resume_ckpt}, start_epoch={start_epoch}, best_psnr={best_psnr:.3f}")
+    elif init_ckpt:
+        ckpt = torch.load(init_ckpt, map_location=device)
+        if "model" not in ckpt:
+            raise KeyError(f"Checkpoint missing 'model' key: {init_ckpt}")
+        model.load_state_dict(ckpt["model"], strict=True)
+        best_psnr = float(ckpt.get("psnr", -1.0))
+        print(f"[Init] loaded model weights from {init_ckpt}")
+
     lpips_loss = LPIPSLoss().to(device)
 
     use_distill = bool(cfg["train"].get("use_teacher_distill", False))
@@ -77,11 +103,19 @@ def main():
             teacher_path=cfg["train"]["teacher_path"],
             layer_keys=cfg["train"].get("teacher_layer_keys", ["down0", "mid", "up0"]),
         ).to(device)
+
+        # Auto-match teacher feature channels: SD UNet branch is typically 4ch, fallback branch is 1ch.
+        if teacher.loaded and teacher.unet is not None:
+            tea_ch = int(getattr(teacher.unet.config, "out_channels", 4))
+        else:
+            tea_ch = 1
+
         distill_loss_fn = DistillLoss(
             stu_channels=[cfg["model"]["feat_ch"]] * 3,
-            tea_channels=[1, 1, 1],
+            tea_channels=[tea_ch, tea_ch, tea_ch],
             proj_ch=cfg["model"]["feat_ch"],
         ).to(device)
+        print(f"[Distill] teacher_loaded={teacher.loaded}, teacher_feat_ch={tea_ch}")
 
     use_prompt_loss = bool(cfg["train"].get("use_prompt_loss", False))
     prompt_loss_fn = None
@@ -96,10 +130,9 @@ def main():
             )
         ).to(device)
 
-    best_psnr = -1.0
     epochs = int(cfg["train"]["epochs"])
 
-    for ep in range(1, epochs + 1):
+    for ep in range(start_epoch, epochs + 1):
         model.train()
         pbar = tqdm(train_loader, desc=f"Epoch {ep}/{epochs}")
         for batch in pbar:
@@ -165,14 +198,43 @@ def main():
             print(f"[Val] epoch={ep} PSNR={val_psnr:.3f}")
 
             ckpt_last = out_dir / "last.pth"
-            torch.save({"epoch": ep, "model": model.state_dict(), "psnr": val_psnr, "config": cfg}, ckpt_last)
+            torch.save(
+                {
+                    "epoch": ep,
+                    "model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "scaler": scaler.state_dict(),
+                    "psnr": val_psnr,
+                    "config": cfg,
+                },
+                ckpt_last,
+            )
 
             if val_psnr > best_psnr:
                 best_psnr = val_psnr
-                torch.save({"epoch": ep, "model": model.state_dict(), "psnr": val_psnr, "config": cfg}, out_dir / "best.pth")
+                torch.save(
+                    {
+                        "epoch": ep,
+                        "model": model.state_dict(),
+                        "optimizer": optimizer.state_dict(),
+                        "scaler": scaler.state_dict(),
+                        "psnr": val_psnr,
+                        "config": cfg,
+                    },
+                    out_dir / "best.pth",
+                )
 
         if ep % int(cfg["train"]["save_every"]) == 0:
-            torch.save({"epoch": ep, "model": model.state_dict(), "config": cfg}, out_dir / f"epoch_{ep}.pth")
+            torch.save(
+                {
+                    "epoch": ep,
+                    "model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "scaler": scaler.state_dict(),
+                    "config": cfg,
+                },
+                out_dir / f"epoch_{ep}.pth",
+            )
 
     print(f"Training complete. Best PSNR={best_psnr:.3f}")
 
