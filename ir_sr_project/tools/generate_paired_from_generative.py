@@ -56,6 +56,27 @@ def degrade_to_lr(hr: Image.Image, scale: int, blur_sigma: float, noise_std: flo
     return x
 
 
+def truncate_to_clip_limit(pipe, text: str, label: str) -> str:
+    tokenizer = getattr(pipe, "tokenizer", None)
+    if tokenizer is None:
+        return text
+
+    max_len = getattr(tokenizer, "model_max_length", 77)
+    token_ids = tokenizer(text, truncation=False, add_special_tokens=True)["input_ids"]
+    if len(token_ids) <= max_len:
+        return text
+
+    encoded = tokenizer(
+        text,
+        truncation=True,
+        max_length=max_len,
+        return_tensors="pt",
+    )
+    truncated_text = tokenizer.decode(encoded["input_ids"][0], skip_special_tokens=True)
+    print(f"[WARN] {label} is too long ({len(token_ids)} > {max_len}); truncated to fit CLIP limit.")
+    return truncated_text
+
+
 def main() -> None:
     args = parse_args()
     prompts = load_prompts(Path(args.prompt_file))
@@ -86,10 +107,12 @@ def main() -> None:
 
     idx = 0
     for prompt in prompts:
+        safe_prompt = truncate_to_clip_limit(pipe, prompt, "prompt")
+        safe_negative_prompt = truncate_to_clip_limit(pipe, args.negative_prompt, "negative_prompt")
         for _ in range(args.num_images_per_prompt):
             result = pipe(
-                prompt=prompt,
-                negative_prompt=args.negative_prompt,
+                prompt=safe_prompt,
+                negative_prompt=safe_negative_prompt,
                 height=args.hr_size,
                 width=args.hr_size,
                 num_inference_steps=args.steps,
