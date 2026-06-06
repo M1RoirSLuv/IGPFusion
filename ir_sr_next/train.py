@@ -11,8 +11,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from ir_sr_next.dataset import DatasetConfig, InfraredSRDataset
-from ir_sr_next.models import DiffusionPriorConfig, DiffusionPriorSR
-from ir_sr_next.models.diffusion_prior_sr import image_gradient
+from ir_sr_next.models import DiffusionPriorConfig, DiffusionPriorSR, image_gradient
 
 
 class LPIPSLoss(torch.nn.Module):
@@ -101,21 +100,20 @@ def main() -> None:
     best = -1.0
     for epoch in range(1, int(cfg["train"]["epochs"]) + 1):
         model.train()
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch}")
+        pbar = tqdm(train_loader, desc=f"[SR] Epoch {epoch}")
         for batch in pbar:
             lr = batch["lr"].to(device)
             hr = batch["hr"].to(device)
 
+            pcfg = cfg.get("prompt", {})
+            prompts = [pcfg.get("train_prompt", "a high quality infrared image with clear thermal edges")] * lr.shape[0]
+
             optimizer.zero_grad(set_to_none=True)
             with autocast(enabled=bool(cfg["runtime"].get("amp", True))):
-                pcfg = cfg.get("prompt", {})
-                prompts = [pcfg.get("train_prompt", "a high quality infrared image with clear thermal edges")] * lr.shape[0]
                 sr, aux = model(lr, prompts=prompts, return_aux=True)
-                loss_pix = (sr - hr).abs().mean()
 
-                sr_grad = image_gradient(sr)
-                hr_grad = image_gradient(hr)
-                loss_grad = (sr_grad - hr_grad).abs().mean()
+                loss_pix = (sr - hr).abs().mean()
+                loss_grad = (image_gradient(sr) - image_gradient(hr)).abs().mean()
 
                 prior_hr = model.prior(hr, prompts)
                 prior_hr = torch.nn.functional.interpolate(prior_hr, size=aux["prior"].shape[-2:], mode="bilinear", align_corners=False)
@@ -142,14 +140,7 @@ def main() -> None:
             scaler.step(optimizer)
             scaler.update()
 
-            pbar.set_postfix(
-                loss=float(loss.item()),
-                pix=float(loss_pix.item()),
-                grad=float(loss_grad.item()),
-                prior=float(loss_prior.item()),
-                freq=float(loss_freq.item()),
-                lpips=float(loss_lp.item()),
-            )
+            pbar.set_postfix(loss=float(loss.item()), pix=float(loss_pix.item()), grad=float(loss_grad.item()))
 
         if epoch % int(cfg["train"].get("val_every", 1)) == 0:
             model.eval()
@@ -159,8 +150,8 @@ def main() -> None:
                     lr = batch["lr"].to(device)
                     hr = batch["hr"].to(device)
                     pcfg = cfg.get("prompt", {})
-                    val_prompts = [pcfg.get("val_prompt", pcfg.get("train_prompt", "a high quality infrared image with clear thermal edges"))]
-                    sr = model(lr, prompts=val_prompts)
+                    val_prompt = pcfg.get("val_prompt", pcfg.get("train_prompt", "a high quality infrared image with clear thermal edges"))
+                    sr = model(lr, prompts=[val_prompt])
                     scores.append(psnr(sr, hr))
 
             mean_psnr = float(np.mean(scores)) if scores else 0.0
